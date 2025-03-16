@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from numpy import sqrt
 from math import ceil
+from math import sqrt
+from cmath import log
 
 ps = 1E-12
 c = 3E8
@@ -11,7 +13,7 @@ delta_x = c * delta_t * 2   #cm
 
 
 def stimulus(t):
-    tau = 30 * delta_t
+    tau = 50 * delta_t
     t0 = 3 * tau
     return np.exp(-((t - t0) / tau) ** 2)
 
@@ -38,7 +40,6 @@ class TransmissionLine:
         self.C = 1 / (self.z0 * self.vp)  # cap pul  (F/m)
         # number of spatial steps for this line 
         self.num_dx = ceil(length_cm/delta_x)  
-        print(self.num_dx)
 
         # arrays for FDTD calculation
         self.v_p = np.zeros(self.num_dx)
@@ -55,7 +56,7 @@ class TransmissionLine:
         return 1 / 2 * (self.v_p[1] - (self.i_d[0] + self.i_b[0]) / 2 * self.z0)
 
 
-fast_forward_n = 30  # only plots every n iterations to speed up calculation
+fast_forward_n = 200  # only plots every n iterations to speed up calculation
 
 
 class Setup:
@@ -71,16 +72,66 @@ class Setup:
     def add_tline_to_chain(self, tline):
         self.tline_chain.append(tline)
 
+    def calc_freq_domain(self,refl_array, plt, stim_array,\
+            probe_array1, probe_array2, i_probe,\
+            probe_offset, begin_impedance, end_impedance):
+        plt.figure(3)
+        in_fft = np.fft.fft(stim_array)
+        probe_fft1 = np.fft.fft(probe_array1)
+        probe_fft2 = np.fft.fft(probe_array2)
+        refl_fft = np.fft.fft(refl_array)
+        i_probe_fft = np.fft.fft(i_probe)
+
+
+        plt.plot(np.fft.fftshift(np.abs(in_fft)))
+        plt.plot(np.fft.fftshift(np.abs(probe_fft1)))
+        plt.plot(np.fft.fftshift(np.abs(probe_fft2)))
+        plt.plot(np.fft.fftshift(np.abs(refl_fft)))
+
+        #Calc Reflection
+        input_voltage = sum(abs(in_fft))
+        refl_voltage = sum(abs(refl_fft))
+        s11 = refl_voltage / input_voltage
+        print("S11: " + str(s11))
+
+        #Calc Transmission
+        output_voltage1_mag = sum(abs(probe_fft1))
+        s21 = (output_voltage1_mag / sqrt(end_impedance))\
+                /(input_voltage/ sqrt(begin_impedance))
+        print("S21: " + str(s21))
+
+        print("Total power: " + str(s11**2 + s21**2))
+
+        #Calc Gamma     -- Adjust reflection to have variable location
+        output_voltage2_mag = sum(abs(probe_fft2))
+
+        output_voltage1 = sum(probe_fft1)
+        output_voltage2 = sum(probe_fft2)
+        gamma = (1/(probe_offset * delta_x) )* log(output_voltage2/output_voltage1_mag)
+        print("Gamma: " + str(gamma))
+    
+        #Calc Characteristic Impedance --V / I_avg
+        z0 = output_voltage1_mag / sum(abs(i_probe_fft)) 
+        print("Characteristic Impedance: " + str(z0))
+        
+        
+
+
+
     def run_sim(self):
         # extract SFTF/probe configuration from tuple
+        probe_offset = 10 #TODO this was randomly chosen
         num_cycles = self.sftf_source[3]
         stim_function = self.sftf_source[2]
         probe_index = self.sftf_source[1]
         stim_index = self.sftf_source[0]
         total_points = sum(line.num_dx for line in self.tline_chain)
         stim_array = []
-        probe_array = []
+        probe_array1 = []
+        probe_array2 = []
+        i_probe = []
         refl_array = []
+
 
         plt.ion()  # Turn on interactive mode
         fig, ax = plt.subplots()
@@ -151,12 +202,27 @@ class Setup:
             combined_current_norm = np.concatenate(
                 tuple(line.i_d * line.z0 for line in self.tline_chain)
             )
+            combined_current = np.concatenate(
+                tuple(line.i_d  for line in self.tline_chain)
+            )
+            combined_current_prev = np.concatenate(
+                tuple(line.i_p  for line in self.tline_chain)
+            )
             current_x = np.concatenate(
                 tuple((np.arange(0, line.num_dx-1) + line.num_dx * idx) * delta_x + delta_x/2 for idx, line in enumerate(self.tline_chain))
             )
             stim_array.append(stim_function(time))
             refl_array.append(combined_voltage[stim_index - 2])
-            probe_array.append(combined_voltage[probe_index])
+            probe_array1.append(combined_voltage[probe_index])
+            probe_array2.append(combined_voltage[probe_index + probe_offset])
+
+            #Current averaging probe
+            i_avg = (combined_current[probe_index + 1] +\
+                    combined_current_prev[probe_index+1] +\
+                    combined_current_prev[probe_index] + \
+                    combined_current[probe_index]) * 0.25
+            i_probe.append(i_avg)
+
             if n % fast_forward_n == 0:
                 update_plot(delta_x * np.array(range(0, total_points)), combined_voltage, current_x, combined_current_norm)
                 plt.pause(0.01)
@@ -164,15 +230,13 @@ class Setup:
 
         plt.figure(2)
         time_plot = np.arange(0, num_cycles) * delta_t
-        plt.plot(time_plot, stim_array, time_plot, probe_array, time_plot, refl_array)
+        plt.plot(time_plot, stim_array, time_plot, probe_array1, time_plot, refl_array)
         plt.legend(['stimulus', 'probe', 'reflection'])
-
-        plt.figure(3)
-        in_fft = np.fft.fft(stim_array)
-        plt.plot(np.fft.fftshift(np.abs(in_fft)))
-        plt.plot(np.fft.fftshift(np.abs(np.fft.fft(probe_array))))
-        plt.plot(np.fft.fftshift(np.abs(np.fft.fft(refl_array))))
-
+ 
+        self.calc_freq_domain(refl_array, plt,stim_array,\
+                probe_array1, probe_array2, i_probe,\
+                probe_offset, self.tline_chain[0].z0, \
+                self.tline_chain[-1].z0)
         plt.show(block=True)
 
 # def calc_v_right(v_current, i_past, i_future):
@@ -201,6 +265,8 @@ def main():
 
     stimulus_start_cm = 0.1 * length1_cm 
     probe_pos_cm = length1_cm + length2_cm + 0.5 * length3_cm
+    #probe_pos_cm = length1_cm + 0.5 * length2_cm 
+    #probe_pos_cm = 0.5 * length1_cm
     setup.add_tline_to_chain(tline1)
     setup.add_tline_to_chain(tline2)
     setup.add_tline_to_chain(tline3)
