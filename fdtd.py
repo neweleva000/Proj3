@@ -82,17 +82,41 @@ class Setup:
         refl_fft = np.fft.fft(refl_array)
         i_probe_fft = np.fft.fft(i_probe)
 
-
         plt.plot(np.fft.fftshift(np.abs(in_fft)))
         plt.plot(np.fft.fftshift(np.abs(probe_fft1)))
         plt.plot(np.fft.fftshift(np.abs(probe_fft2)))
         plt.plot(np.fft.fftshift(np.abs(refl_fft)))
 
-        #Calc Reflection
-        input_voltage = sum(abs(in_fft))
-        refl_voltage = sum(abs(refl_fft))
+        plt.figure(4)
+
+        #Calc S11 0 to 5G
+        input_voltage = abs(in_fft)
+        refl_voltage = abs(refl_fft)
         s11 = refl_voltage / input_voltage
-        print("S11: " + str(s11))
+        p11 = s11 **2
+        w_v = np.fft.fftfreq(len(probe_fft1), delta_t)
+        index_0 = np.where(w_v == 0)[0][0]
+        index_5 = np.where(w_v == 5*10**9)[0][0]
+        plt.plot(w_v[index_0:index_5], p11[index_0:index_5])
+        plt.title("Reflected Power")
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Percent Power")
+
+        
+        #Reflected power
+        input_power = sum(abs(in_fft) **2)
+        refl_power = sum(abs(refl_fft) **2)
+        R_p = refl_power / input_power
+        print("Reflected power: " + str(R_p))
+
+        plt.figure(5)
+        #Calc S21 0 to 5G
+        output_voltage1 = abs(probe_fft1)  
+
+        #Transmitted power
+        output_power = sum(abs(probe_fft1) **2)
+        T_p = (output_power / end_impedance) / (input_power/begin_impedance)
+        print("Transmitted power: " + str(T_p))
 
         #Calc Transmission
         output_voltage1_mag = sum(abs(probe_fft1))
@@ -259,17 +283,17 @@ def main():
 
     tline1 = TransmissionLine(z0_1, 1, length1_cm)
     tline2 = TransmissionLine(z0_2, 1, length2_cm)
-    tline3 = TransmissionLine(z0_3, 1, length3_cm)
+    #tline3 = TransmissionLine(z0_3, 1, length3_cm)
 
     setup = Setup()
 
     stimulus_start_cm = 0.1 * length1_cm 
     probe_pos_cm = length1_cm + length2_cm + 0.5 * length3_cm
-    #probe_pos_cm = length1_cm + 0.5 * length2_cm 
+    probe_pos_cm = length1_cm + 0.5 * length2_cm 
     #probe_pos_cm = 0.5 * length1_cm
     setup.add_tline_to_chain(tline1)
     setup.add_tline_to_chain(tline2)
-    setup.add_tline_to_chain(tline3)
+    #setup.add_tline_to_chain(tline3)
     setup.config_sftf_measurement(stimulus_start_cm, probe_pos_cm, stimulus, num_cycles)
     setup.run_sim()
 
