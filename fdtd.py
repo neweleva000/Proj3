@@ -1,12 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from numpy import sqrt
+from math import ceil
 
 ps = 1E-12
 c = 3E8
 
 delta_t = 10 * ps  # time step
-delta_x = c * delta_t * 2
+delta_x = c * delta_t * 2   #cm
 
 
 def stimulus(t):
@@ -15,7 +16,7 @@ def stimulus(t):
     return np.exp(-((t - t0) / tau) ** 2)
 
 
-stimulus_index = 20  # round(num_points / 2)
+#stimulus_index = 20  # round(num_points / 2)
 
 
 def calc_i_next(i_prev, v_now, L):
@@ -30,20 +31,22 @@ def calc_v_next(v_prev, i_now, v_next_left, v_next_right, C):
 
 
 class TransmissionLine:
-    def __init__(self, z0, Er, num_dx):
+    def __init__(self, z0, Er, length_cm):
         self.z0 = z0   # characteristic impedance
         self.vp = c / np.sqrt(Er)  # propagation velocity
-        self.L = self.z0 / self.vp  # inductance per unit length (H/m)
-        self.C = 1 / (self.z0 * self.vp)  # capacitance per unit length (F/m)
-        self.num_dx = num_dx  # number of divisions for this line (all lines use the same value of dx)
+        self.L = self.z0 / self.vp  # pul inductance (H/m)
+        self.C = 1 / (self.z0 * self.vp)  # cap pul  (F/m)
+        # number of spatial steps for this line 
+        self.num_dx = ceil(length_cm/delta_x)  
+        print(self.num_dx)
 
         # arrays for FDTD calculation
-        self.v_p = np.zeros(num_dx)
-        self.i_p = np.zeros(num_dx - 1)
-        self.v_a = np.zeros(num_dx)
-        self.i_b = np.zeros(num_dx - 1)
-        self.v_c = np.zeros(num_dx)
-        self.i_d = np.zeros(num_dx - 1)
+        self.v_p = np.zeros(self.num_dx)
+        self.i_p = np.zeros(self.num_dx - 1)
+        self.v_a = np.zeros(self.num_dx)
+        self.i_b = np.zeros(self.num_dx - 1)
+        self.v_c = np.zeros(self.num_dx)
+        self.i_d = np.zeros(self.num_dx - 1)
 
     def transmitted_voltage_right(self):
         return 1 / 2 * (self.v_p[-2] + (self.i_d[-1] + self.i_b[-1]) / 2 * self.z0)
@@ -52,7 +55,7 @@ class TransmissionLine:
         return 1 / 2 * (self.v_p[1] - (self.i_d[0] + self.i_b[0]) / 2 * self.z0)
 
 
-fast_forward_n = 25  # only plots every n iterations to speed up calculation
+fast_forward_n = 30  # only plots every n iterations to speed up calculation
 
 
 class Setup:
@@ -60,7 +63,9 @@ class Setup:
         self.tline_chain = []
         self.sftf_source = None
 
-    def config_sftf_measurement(self, stim_index, probe_index, stim_function, num_cycles):
+    def config_sftf_measurement(self, stim_length, probe_length, stim_function, num_cycles):
+        stim_index = ceil(stim_length / delta_x)
+        probe_index = ceil(probe_length / delta_x)
         self.sftf_source = (stim_index, probe_index, stim_function, num_cycles)
 
     def add_tline_to_chain(self, tline):
@@ -80,12 +85,21 @@ class Setup:
         plt.ion()  # Turn on interactive mode
         fig, ax = plt.subplots()
         x = np.array(range(0, total_points)) * delta_x
-        line, = ax.plot(x, np.zeros(total_points))
+        line = ax.plot(x, np.zeros(total_points), label='Voltage')
+        line2 = ax.plot(x, np.zeros(total_points),label='Current')
+        ax.set_xlabel("Position (cm)")
+        ax.set_title('Cascaded Transmission Line')
+        ax.legend()
 
         # Update function
         def update_plot(new_x, new_y, new_x2, new_y2):
             ax.cla()  # Clear the current axes
-            ax.plot(new_x, new_y, new_x2, new_y2)  # Redraw with updated data
+            ax.plot(new_x, new_y, label='Voltage')
+            ax.plot(new_x2, new_y2,label='Current')  # Redraw with updated data
+            ax.set_xlabel("Position (cm)")
+            ax.set_title('Cascaded Transmission Line')
+            ax.legend()
+            
             # plt.ylim([-0.5, 1.1])
             plt.draw()
 
@@ -170,19 +184,27 @@ class Setup:
 
 
 def main():
-    num_cycles = 4000
-    points_per_line = 200
+    num_cycles = 10000
+    
+    z0_1 = 50
+    z0_2 = 100
+    z0_3 = 50
+    length1_cm = 7.5
+    length2_cm = 7.5 
+    length3_cm = 7.5
 
-    tline1 = TransmissionLine(50, 1, points_per_line)
-    tline2 = TransmissionLine(100, 1, points_per_line)
-    tline3 = TransmissionLine(50, 1, points_per_line)
+    tline1 = TransmissionLine(z0_1, 1, length1_cm)
+    tline2 = TransmissionLine(z0_2, 1, length2_cm)
+    tline3 = TransmissionLine(z0_3, 1, length3_cm)
 
     setup = Setup()
 
+    stimulus_start_cm = 0.1 * length1_cm 
+    probe_pos_cm = length1_cm + length2_cm + 0.5 * length3_cm
     setup.add_tline_to_chain(tline1)
     setup.add_tline_to_chain(tline2)
     setup.add_tline_to_chain(tline3)
-    setup.config_sftf_measurement(20, 2 * points_per_line + 90, stimulus, num_cycles)
+    setup.config_sftf_measurement(stimulus_start_cm, probe_pos_cm, stimulus, num_cycles)
     setup.run_sim()
 
 main()
