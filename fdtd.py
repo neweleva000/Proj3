@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from numpy import sqrt
 
-ps = 1E-15
+ps = 1E-12
 c = 3E8
 
 delta_t = 10 * ps  # time step
@@ -10,7 +10,7 @@ delta_x = c * delta_t * 2
 
 
 def stimulus(t):
-    tau = 10 * delta_t
+    tau = 30 * delta_t
     t0 = 3 * tau
     return np.exp(-((t - t0) / tau) ** 2)
 
@@ -52,7 +52,7 @@ class TransmissionLine:
         return 1 / 2 * (self.v_p[1] - (self.i_d[0] + self.i_b[0]) / 2 * self.z0)
 
 
-fast_forward_n = 50  # only plots every n iterations to speed up calculation
+fast_forward_n = 25  # only plots every n iterations to speed up calculation
 
 
 class Setup:
@@ -170,11 +170,11 @@ class Setup:
 
 
 def main():
-    num_cycles = 10000
-    points_per_line = 100
+    num_cycles = 4000
+    points_per_line = 200
 
     tline1 = TransmissionLine(50, 1, points_per_line)
-    tline2 = TransmissionLine(1000, 1, points_per_line)
+    tline2 = TransmissionLine(100, 1, points_per_line)
     tline3 = TransmissionLine(50, 1, points_per_line)
 
     setup = Setup()
@@ -182,7 +182,7 @@ def main():
     setup.add_tline_to_chain(tline1)
     setup.add_tline_to_chain(tline2)
     setup.add_tline_to_chain(tline3)
-    setup.config_sftf_measurement(20, 290, stimulus, num_cycles)
+    setup.config_sftf_measurement(20, 2 * points_per_line + 90, stimulus, num_cycles)
     setup.run_sim()
 
 main()
