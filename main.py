@@ -127,7 +127,7 @@ class Transmission_line:
 
 
         #TODO this isn't working for some reason
-        self.v_c[-1] = self.v_a[-2]
+        self.v_c[-1] = self.v_a[-2] * self.z0
         #self.end.gen_condition(time,dt,\
         #dx, False, self.v_a)#stimulus(time, dt)
 
