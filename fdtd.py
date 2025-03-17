@@ -8,12 +8,12 @@ from numpy import log
 ps = 1E-12
 c = 3E8
 
-delta_t = 1 * ps  # time step
+delta_t = 0.3 * ps  # time step
 delta_x = c * delta_t * 2   #cm
 
 
 def stimulus(t):
-    tau = 50 * delta_t
+    tau = 100 * delta_t
     t0 = 3 * tau
     return np.exp(-((t - t0) / tau) ** 2)
 
@@ -56,7 +56,7 @@ class TransmissionLine:
         return 1 / 2 * (self.v_p[1] - (self.i_d[0] + self.i_b[0]) / 2 * self.z0)
 
 
-fast_forward_n = 300  # only plots every n iterations to speed up calculation
+fast_forward_n = 500  # only plots every n iterations to speed up calculation
 
 
 class Setup:
@@ -137,7 +137,7 @@ class Setup:
         output_voltage2_mag = sum(abs(probe_fft2))
 
         plt.figure(7)
-        gamma = (1/(probe_offset * delta_x) )* (log(probe_fft2) - log(probe_fft1))
+        gamma = (1/(probe_offset * delta_x) )* (log(probe_fft1/probe_fft2))
         plt.plot(w_v[index_0:index_5], np.real(gamma[index_0:index_5]),label="Alpha")
         plt.plot(w_v[index_0:index_5], np.imag(gamma[index_0:index_5]),label="B")
         plt.title("Propagation Constant")
@@ -152,7 +152,7 @@ class Setup:
 
     def run_sim(self):
         # extract SFTF/probe configuration from tuple
-        probe_offset = 10 #TODO this was randomly chosen
+        probe_offset = 20 #TODO this was randomly chosen
         num_cycles = self.sftf_source[3]
         stim_function = self.sftf_source[2]
         probe_index = self.sftf_source[1]
@@ -180,6 +180,7 @@ class Setup:
             ax.plot(new_x, new_y, label='Voltage')
             ax.plot(new_x2, new_y2,label='Current')  # Redraw with updated data
             ax.set_xlabel("Position (cm)")
+            ax.set_ylabel("Voltage(V)/Current(A)")
             ax.set_title('Cascaded Transmission Line')
             ax.legend()
             
@@ -273,7 +274,7 @@ class Setup:
 
 
 def main():
-    num_cycles = 50000
+    num_cycles = 800000
     
     z0_1 = 50
     z0_2 = 100
@@ -284,17 +285,17 @@ def main():
 
     tline1 = TransmissionLine(z0_1, 1, length1_cm)
     tline2 = TransmissionLine(z0_2, 1, length2_cm)
-    #tline3 = TransmissionLine(z0_3, 1, length3_cm)
+    tline3 = TransmissionLine(z0_3, 1, length3_cm)
 
     setup = Setup()
 
     stimulus_start_cm = 0.1 * length1_cm 
     probe_pos_cm = length1_cm + length2_cm + 0.5 * length3_cm
-    probe_pos_cm = length1_cm + 0.5 * length2_cm 
+    #probe_pos_cm = length1_cm + 0.5 * length2_cm 
     #probe_pos_cm = 0.5 * length1_cm
     setup.add_tline_to_chain(tline1)
     setup.add_tline_to_chain(tline2)
-    #setup.add_tline_to_chain(tline3)
+    setup.add_tline_to_chain(tline3)
     setup.config_sftf_measurement(stimulus_start_cm, probe_pos_cm, stimulus, num_cycles)
     setup.run_sim()
 
