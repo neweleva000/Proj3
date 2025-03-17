@@ -3,12 +3,12 @@ import matplotlib.pyplot as plt
 from numpy import sqrt
 from math import ceil
 from math import sqrt
-from cmath import log
+from numpy import log
 
 ps = 1E-12
 c = 3E8
 
-delta_t = 10 * ps  # time step
+delta_t = 1 * ps  # time step
 delta_x = c * delta_t * 2   #cm
 
 
@@ -56,7 +56,7 @@ class TransmissionLine:
         return 1 / 2 * (self.v_p[1] - (self.i_d[0] + self.i_b[0]) / 2 * self.z0)
 
 
-fast_forward_n = 200  # only plots every n iterations to speed up calculation
+fast_forward_n = 300  # only plots every n iterations to speed up calculation
 
 
 class Setup:
@@ -75,28 +75,33 @@ class Setup:
     def calc_freq_domain(self,refl_array, plt, stim_array,\
             probe_array1, probe_array2, i_probe,\
             probe_offset, begin_impedance, end_impedance):
-        plt.figure(3)
+
         in_fft = np.fft.fft(stim_array)
         probe_fft1 = np.fft.fft(probe_array1)
         probe_fft2 = np.fft.fft(probe_array2)
         refl_fft = np.fft.fft(refl_array)
         i_probe_fft = np.fft.fft(i_probe)
 
-        plt.plot(np.fft.fftshift(np.abs(in_fft)))
-        plt.plot(np.fft.fftshift(np.abs(probe_fft1)))
-        plt.plot(np.fft.fftshift(np.abs(probe_fft2)))
-        plt.plot(np.fft.fftshift(np.abs(refl_fft)))
+        #indexing
+        w_v = np.fft.fftfreq(len(probe_fft1), delta_t)
+        index_0 = np.argmin(np.abs(w_v))
+        index_5 = np.argmin(np.abs(w_v - 5*10**9))
+
+        plt.figure(3)
+        plt.plot(w_v[index_0:index_5],np.abs(in_fft)[index_0:index_5], label='Stimulus')
+        plt.plot(w_v[index_0:index_5],np.abs(probe_fft1)[index_0:index_5],label='Transmitted')
+        plt.plot(w_v[index_0:index_5],np.abs(refl_fft)[index_0:index_5],label='Reflected')
+        plt.title('Frequency Domain Voltage Signal')
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Voltage')
+        plt.legend()
 
         plt.figure(4)
-
         #Calc S11 0 to 5G
-        input_voltage = abs(in_fft)
-        refl_voltage = abs(refl_fft)
-        s11 = refl_voltage / input_voltage
-        p11 = s11 **2
-        w_v = np.fft.fftfreq(len(probe_fft1), delta_t)
-        index_0 = np.where(w_v == 0)[0][0]
-        index_5 = np.where(w_v == 5*10**9)[0][0]
+        input_voltage = in_fft
+        refl_voltage = refl_fft
+        s11 = np.abs(refl_voltage / input_voltage)
+        p11 = np.abs(s11) **2
         plt.plot(w_v[index_0:index_5], p11[index_0:index_5])
         plt.title("Reflected Power")
         plt.xlabel("Frequency (Hz)")
@@ -106,40 +111,43 @@ class Setup:
         #Reflected power
         input_power = sum(abs(in_fft) **2)
         refl_power = sum(abs(refl_fft) **2)
-        R_p = refl_power / input_power
+        R_p = (refl_power / input_power)
         print("Reflected power: " + str(R_p))
 
         plt.figure(5)
         #Calc S21 0 to 5G
-        output_voltage1 = abs(probe_fft1)  
+        s21 = np.abs((probe_fft1/sqrt(end_impedance) ) / (input_voltage/sqrt(begin_impedance)))
+        p21 = np.abs(s21) **2
+        plt.plot(w_v[index_0:index_5], p21[index_0:index_5])
+        plt.title("Transmit Power")
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Percent Power")
+
+        plt.figure(6)
+        plt.plot(w_v[index_0:index_5], p21[index_0:index_5] + p11[index_0:index_5])
 
         #Transmitted power
         output_power = sum(abs(probe_fft1) **2)
         T_p = (output_power / end_impedance) / (input_power/begin_impedance)
         print("Transmitted power: " + str(T_p))
 
-        #Calc Transmission
-        output_voltage1_mag = sum(abs(probe_fft1))
-        s21 = (output_voltage1_mag / sqrt(end_impedance))\
-                /(input_voltage/ sqrt(begin_impedance))
-        print("S21: " + str(s21))
-
-        print("Total power: " + str(s11**2 + s21**2))
+        print("Total power: " + str(T_p + R_p))
 
         #Calc Gamma     -- Adjust reflection to have variable location
         output_voltage2_mag = sum(abs(probe_fft2))
 
-        output_voltage1 = sum(probe_fft1)
-        output_voltage2 = sum(probe_fft2)
-        gamma = (1/(probe_offset * delta_x) )* log(output_voltage2/output_voltage1_mag)
-        print("Gamma: " + str(gamma))
-    
+        plt.figure(7)
+        gamma = (1/(probe_offset * delta_x) )* (log(probe_fft2) - log(probe_fft1))
+        plt.plot(w_v[index_0:index_5], np.real(gamma[index_0:index_5]),label="Alpha")
+        plt.plot(w_v[index_0:index_5], np.imag(gamma[index_0:index_5]),label="B")
+        plt.title("Propagation Constant")
+        plt.xlabel("Frequency (Hz)")
+        plt.legend() 
+
         #Calc Characteristic Impedance --V / I_avg
+        output_voltage1_mag = sum(abs(probe_fft1))
         z0 = output_voltage1_mag / sum(abs(i_probe_fft)) 
         print("Characteristic Impedance: " + str(z0))
-        
-        
-
 
 
     def run_sim(self):
@@ -252,10 +260,10 @@ class Setup:
                 plt.pause(0.01)
                 print(time)
 
-        plt.figure(2)
-        time_plot = np.arange(0, num_cycles) * delta_t
-        plt.plot(time_plot, stim_array, time_plot, probe_array1, time_plot, refl_array)
-        plt.legend(['stimulus', 'probe', 'reflection'])
+        #plt.figure(2)
+        #time_plot = np.arange(0, num_cycles) * delta_t
+        #plt.plot(time_plot, stim_array, time_plot, probe_array1, time_plot, refl_array)
+        #plt.legend(['stimulus', 'probe', 'reflection'])
  
         self.calc_freq_domain(refl_array, plt,stim_array,\
                 probe_array1, probe_array2, i_probe,\
@@ -263,16 +271,9 @@ class Setup:
                 self.tline_chain[-1].z0)
         plt.show(block=True)
 
-# def calc_v_right(v_current, i_past, i_future):
-#     return v_current[0:-1] - delta_x / delta_t * L * (i_future - i_past)
-#
-#
-# def calc_i_right(i_current, v_past, v_future):
-#     return i_current[0:-1] - delta_x / delta_t * C * (v_future[1:-1] - v_past[1:-1])
-
 
 def main():
-    num_cycles = 10000
+    num_cycles = 50000
     
     z0_1 = 50
     z0_2 = 100
