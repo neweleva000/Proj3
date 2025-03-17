@@ -13,7 +13,7 @@ delta_x = c * delta_t * 2   #cm
 
 
 def stimulus(t):
-    tau = 100 * delta_t
+    tau = 30 * delta_t
     t0 = 3 * tau
     return np.exp(-((t - t0) / tau) ** 2)
 
@@ -39,7 +39,7 @@ class TransmissionLine:
         self.L = self.z0 / self.vp  # pul inductance (H/m)
         self.C = 1 / (self.z0 * self.vp)  # cap pul  (F/m)
         # number of spatial steps for this line 
-        self.num_dx = ceil(length_cm/delta_x)  
+        self.num_dx = ceil(length_cm/delta_x / 100)
 
         # arrays for FDTD calculation
         self.v_p = np.zeros(self.num_dx)
@@ -56,7 +56,7 @@ class TransmissionLine:
         return 1 / 2 * (self.v_p[1] - (self.i_d[0] + self.i_b[0]) / 2 * self.z0)
 
 
-fast_forward_n = 500  # only plots every n iterations to speed up calculation
+fast_forward_n = 20  # only plots every n iterations to speed up calculation
 
 
 class Setup:
@@ -65,8 +65,8 @@ class Setup:
         self.sftf_source = None
 
     def config_sftf_measurement(self, stim_length, probe_length, stim_function, num_cycles):
-        stim_index = ceil(stim_length / delta_x)
-        probe_index = ceil(probe_length / delta_x)
+        stim_index = ceil(stim_length / delta_x / 100)
+        probe_index = ceil(probe_length / delta_x / 100)
         self.sftf_source = (stim_index, probe_index, stim_function, num_cycles)
 
     def add_tline_to_chain(self, tline):
@@ -274,7 +274,7 @@ class Setup:
 
 
 def main():
-    num_cycles = 800000
+    num_cycles = 6000
     
     z0_1 = 50
     z0_2 = 100
