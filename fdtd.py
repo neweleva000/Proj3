@@ -11,10 +11,12 @@ c = 3E8
 delta_t = 0.3 * ps  # time step
 delta_x = c * delta_t * 2   #cm
 
+# these need to be global in order to extract dispersion
+tau = 30 * delta_t  # 30
+t0 = 3 * tau
+
 
 def stimulus(t):
-    tau = 30 * delta_t
-    t0 = 3 * tau
     return np.exp(-((t - t0) / tau) ** 2)
 
 
@@ -56,7 +58,7 @@ class TransmissionLine:
         return 1 / 2 * (self.v_p[1] - (self.i_d[0] + self.i_b[0]) / 2 * self.z0)
 
 
-fast_forward_n = 20  # only plots every n iterations to speed up calculation
+fast_forward_n = 100  # only plots every n iterations to speed up calculation
 
 
 class Setup:
@@ -83,16 +85,16 @@ class Setup:
         i_probe_fft = np.fft.fft(i_probe)
 
         #indexing
-        w_v = np.fft.fftfreq(len(probe_fft1), delta_t)
+        w_v = np.fft.fftfreq(len(probe_fft1), delta_t) / 1E9
         index_0 = np.argmin(np.abs(w_v))
-        index_5 = np.argmin(np.abs(w_v - 5*10**9))
+        index_5 = np.argmin(np.abs(w_v - 5))
 
         plt.figure(3)
         plt.plot(w_v[index_0:index_5],np.abs(in_fft)[index_0:index_5], label='Stimulus')
         plt.plot(w_v[index_0:index_5],np.abs(probe_fft1)[index_0:index_5],label='Transmitted')
         plt.plot(w_v[index_0:index_5],np.abs(refl_fft)[index_0:index_5],label='Reflected')
         plt.title('Frequency Domain Voltage Signal')
-        plt.xlabel('Frequency (Hz)')
+        plt.xlabel('Frequency (GHz)')
         plt.ylabel('Voltage')
         plt.legend()
 
@@ -104,7 +106,7 @@ class Setup:
         p11 = np.abs(s11) **2
         plt.plot(w_v[index_0:index_5], p11[index_0:index_5])
         plt.title("Reflected Power")
-        plt.xlabel("Frequency (Hz)")
+        plt.xlabel("Frequency (GHz)")
         plt.ylabel("Percent Power")
 
         
@@ -138,11 +140,39 @@ class Setup:
 
         plt.figure(7)
         gamma = (1/(probe_offset * delta_x) )* (log(probe_fft1/probe_fft2))
+        freq = w_v
+        normalized_beta = np.imag(gamma[index_0:index_5]) / (2 * np.pi * freq[index_0:index_5])
         plt.plot(w_v[index_0:index_5], np.real(gamma[index_0:index_5]),label="Alpha")
-        plt.plot(w_v[index_0:index_5], np.imag(gamma[index_0:index_5]),label="B")
+        # plt.plot(w_v[index_0:index_5], normalized_beta, label="Beta/(2 pi f)")
+        plt.plot(w_v[index_0:index_5], np.imag(gamma[index_0:index_5]),label="Beta")
         plt.title("Propagation Constant")
         plt.xlabel("Frequency (Hz)")
-        plt.legend() 
+        plt.legend()
+
+        # grid dispersion
+        plt.figure(8)
+        freq_Hz = np.flip(np.fft.fftshift(w_v * 1E9))
+        freq_GHz = freq_Hz / 1e9
+        in_shifted = np.flip(np.fft.fftshift(in_fft))
+        out_shifted = np.flip(np.fft.fftshift(probe_fft1))
+        use_indices = np.argwhere((abs(in_shifted) > 0.01) * (freq_Hz > 0))
+        unwrap_stim_distance = t0 * c
+        unwrap_probe_distance = unwrap_stim_distance + 0.8 * 7.5 / 100
+        unwrapped_stim = in_shifted * np.exp(1j * 2 * np.pi * freq_Hz * unwrap_stim_distance / c)
+        arg_stim = np.unwrap(np.angle(unwrapped_stim[use_indices]))
+        unwrapped_response = out_shifted * np.exp(1j * 2 * np.pi * freq_Hz * unwrap_probe_distance / c)
+        arg_probe = np.unwrap(np.angle(unwrapped_response[use_indices]))
+        # plt.plot(freq_GHz[use_indices], np.real(unwrapped_stim[use_indices]), 'o', label='Real(in)')
+        # plt.plot(freq_GHz[use_indices], np.imag(unwrapped_stim[use_indices]), 'o', label='Imag(in)')
+        plt.plot(freq_GHz[use_indices], arg_stim, label='arg[in]')
+        plt.plot(freq_GHz[use_indices], arg_probe, label='arg[out]')
+        plt.ylabel('Phase deviation (radians)')
+        plt.xlabel('Frequency (GHz)')
+        plt.title('Grid dispersion for single 50ohm line')
+        # plt.plot(freq_GHz[use_indices], np.real(unwrapped_response[use_indices]), 'o', label='Imag(out)')
+        # plt.plot(freq_GHz[use_indices], np.real(unwrapped_response[use_indices]), 'o', label='Real(out)')
+
+        plt.legend()
 
         #Calc Characteristic Impedance --V / I_avg
         output_voltage1_mag = sum(abs(probe_fft1))
@@ -177,8 +207,8 @@ class Setup:
         # Update function
         def update_plot(new_x, new_y, new_x2, new_y2):
             ax.cla()  # Clear the current axes
-            ax.plot(new_x, new_y, label='Voltage')
-            ax.plot(new_x2, new_y2,label='Current')  # Redraw with updated data
+            ax.plot(new_x * 100, new_y, label='Voltage')
+            ax.plot(new_x2 * 100, new_y2,label='Current')  # Redraw with updated data
             ax.set_xlabel("Position (cm)")
             ax.set_ylabel("Voltage(V)/Current(A)")
             ax.set_title('Cascaded Transmission Line')
@@ -261,10 +291,13 @@ class Setup:
                 plt.pause(0.01)
                 print(time)
 
-        #plt.figure(2)
-        #time_plot = np.arange(0, num_cycles) * delta_t
-        #plt.plot(time_plot, stim_array, time_plot, probe_array1, time_plot, refl_array)
-        #plt.legend(['stimulus', 'probe', 'reflection'])
+        plt.figure(2)
+        time_plot = np.arange(0, num_cycles) * delta_t / ps
+        plt.plot(time_plot, stim_array, time_plot, probe_array1, time_plot, refl_array)
+        plt.legend(['Stimulus', 'Transmitted', 'Reflected'])
+        plt.xlabel('Time (ps)')
+        plt.ylabel('Voltage (V)')
+        plt.title('Time-domain response')
  
         self.calc_freq_domain(refl_array, plt,stim_array,\
                 probe_array1, probe_array2, i_probe,\
@@ -274,7 +307,7 @@ class Setup:
 
 
 def main():
-    num_cycles = 6000
+    num_cycles = 4000
     
     z0_1 = 50
     z0_2 = 100
@@ -290,12 +323,12 @@ def main():
     setup = Setup()
 
     stimulus_start_cm = 0.1 * length1_cm 
-    probe_pos_cm = length1_cm + length2_cm + 0.5 * length3_cm
+    probe_pos_cm = length1_cm + length2_cm + 0.9 * length3_cm
     #probe_pos_cm = length1_cm + 0.5 * length2_cm 
-    #probe_pos_cm = 0.5 * length1_cm
+    probe_pos_cm = 0.9 * length1_cm
     setup.add_tline_to_chain(tline1)
-    setup.add_tline_to_chain(tline2)
-    setup.add_tline_to_chain(tline3)
+    # setup.add_tline_to_chain(tline2)
+    # setup.add_tline_to_chain(tline3)
     setup.config_sftf_measurement(stimulus_start_cm, probe_pos_cm, stimulus, num_cycles)
     setup.run_sim()
 
