@@ -4,11 +4,12 @@ from numpy import sqrt
 from math import ceil
 from math import sqrt
 from numpy import log
+import csv
 
 ps = 1E-12
 c = 3E8
 
-delta_t = 0.3 * ps  # time step
+delta_t = 0.5 * ps  # time step
 delta_x = c * delta_t * 2   #cm
 
 # these need to be global in order to extract dispersion
@@ -164,11 +165,20 @@ class Setup:
         arg_probe = np.unwrap(np.angle(unwrapped_response[use_indices]))
         # plt.plot(freq_GHz[use_indices], np.real(unwrapped_stim[use_indices]), 'o', label='Real(in)')
         # plt.plot(freq_GHz[use_indices], np.imag(unwrapped_stim[use_indices]), 'o', label='Imag(in)')
+        filename_marker = int(100 * delta_t / ps)
+
+        with open('dispersion-{}.csv'.format(filename_marker), 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',')
+            for i in range(0, len(arg_probe)):
+                writer.writerow([freq_GHz[use_indices][i], arg_probe[i]])
+
+
         plt.plot(freq_GHz[use_indices], arg_stim, label='arg[in]')
         plt.plot(freq_GHz[use_indices], arg_probe, label='arg[out]')
         plt.ylabel('Phase deviation (radians)')
         plt.xlabel('Frequency (GHz)')
-        plt.title('Grid dispersion for single 50ohm line')
+        plt.title('Grid dispersion for single 7.5cm line, $\\tau = {} \\Delta t$, $\\Delta t={:.02}$ ps'.format(
+            int(tau/delta_t), delta_t/ps))
         # plt.plot(freq_GHz[use_indices], np.real(unwrapped_response[use_indices]), 'o', label='Imag(out)')
         # plt.plot(freq_GHz[use_indices], np.real(unwrapped_response[use_indices]), 'o', label='Real(out)')
 
@@ -307,7 +317,7 @@ class Setup:
 
 
 def main():
-    num_cycles = 4000
+    num_cycles = int(0.2 / (delta_t * c))
     
     z0_1 = 50
     z0_2 = 100
