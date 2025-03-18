@@ -59,7 +59,7 @@ class TransmissionLine:
         return 1 / 2 * (self.v_p[1] - (self.i_d[0] + self.i_b[0]) / 2 * self.z0)
 
 
-fast_forward_n = 100  # only plots every n iterations to speed up calculation
+fast_forward_n = 25  # only plots every n iterations to speed up calculation
 
 
 class Setup:
