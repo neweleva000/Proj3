@@ -317,7 +317,8 @@ class Setup:
 
 
 def main():
-    num_cycles = int(0.2 / (delta_t * c))
+    prop_length_sim = 1.5   # meters, distance a pulse will travel in the simulation time
+    num_cycles = int(prop_length_sim / (delta_t * c))
     
     z0_1 = 50
     z0_2 = 100
@@ -335,10 +336,10 @@ def main():
     stimulus_start_cm = 0.1 * length1_cm 
     probe_pos_cm = length1_cm + length2_cm + 0.9 * length3_cm
     #probe_pos_cm = length1_cm + 0.5 * length2_cm 
-    probe_pos_cm = 0.9 * length1_cm
+    # probe_pos_cm = 0.9 * length1_cm
     setup.add_tline_to_chain(tline1)
-    # setup.add_tline_to_chain(tline2)
-    # setup.add_tline_to_chain(tline3)
+    setup.add_tline_to_chain(tline2)
+    setup.add_tline_to_chain(tline3)
     setup.config_sftf_measurement(stimulus_start_cm, probe_pos_cm, stimulus, num_cycles)
     setup.run_sim()
 
